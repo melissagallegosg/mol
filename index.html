@@ -1251,7 +1251,7 @@
   --nav-h:62px; --hdr-h:72px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Instrument Sans',sans-serif;font-size:14px;overflow:hidden}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Instrument Sans',sans-serif;font-size:14px;overflow-y:auto;overflow-x:hidden}
 
 /* GRAIN */
 body::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");pointer-events:none;z-index:9999}
@@ -2504,6 +2504,28 @@ body::after {
 /* CUSTOM SELECT STYLES */
 select.edit-select option { background: #030a10; color: var(--text); }
 select.isel option, select.asel option, select.cb-asel option { background: #030a10; color: var(--text); }
+
+/* ============================================
+   FIX PARA HABILITAR SCROLL VERTICAL
+   ============================================ */
+html {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scroll-behavior: smooth;
+}
+
+body {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  min-height: 100vh;
+  height: auto !important;
+}
+
+/* Mantener efectos de fondo fijos durante scroll */
+body::before,
+body::after {
+  position: fixed !important;
+}
 
 </style>
 </head>

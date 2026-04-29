@@ -10,7 +10,7 @@
   "routes": [
     {
       "src": "/",
-      "dest": "/melissa_mapa_neon.html"
+      "dest": "/melissa_mapa_neon_fixed.html"
     },
     {
       "src": "/(.*)",
