@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mapa de Vida — Melissa</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Exo+2:ital,wght@0,300;0,400;0,600;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<!-- Supabase SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --bg: #0d0d0f;
@@ -2531,13 +2533,7 @@ body::after {
 </head>
 <body>
 
-<!-- ======= CONFIG — EDITA AQUÍ ======= -->
-<script>
-  // 🔧 PON TUS CREDENCIALES DE SUPABASE AQUÍ
-  const SUPABASE_URL = 'https://TU_PROYECTO.supabase.co';
-  const SUPABASE_ANON_KEY = 'TU_ANON_KEY_AQUI';
-</script>
-<!-- ==================================== -->
+
 
 <div class="header">
   <p class="header-eyebrow">Mapa de vida · Contrato personal</p>
@@ -5381,6 +5377,307 @@ document.addEventListener('DOMContentLoaded', async () => {
 //   data JSONB,
 //   updated_at TIMESTAMPTZ DEFAULT NOW()
 // );
+</script>
+
+<!-- ============================================ -->
+<!-- INTEGRACIÓN SUPABASE - MELISSA MAPA DE VIDA -->
+<!-- ============================================ -->
+<script>
+// ============================================
+// CONFIGURACIÓN SUPABASE
+// ============================================
+const SUPABASE_URL = 'https://rymazwmtgjrvpmodjcw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5bWF6d210Z2pydnBtb3ZkamN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0ODcwNTYsImV4cCI6MjA5MzA2MzA1Nn0.5hGhPQQikAj-y7VG6HtoeBhq_3ISX7759yjaY9W11oM';
+
+const { createClient } = supabase;
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Generar o recuperar ID de usuario único
+let userId = localStorage.getItem('userId');
+if (!userId) {
+  userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  localStorage.setItem('userId', userId);
+  console.log('🆔 Nuevo usuario creado:', userId);
+}
+
+console.log('✅ Supabase configurado para usuario:', userId);
+
+// ============================================
+// FUNCIONES DE SINCRONIZACIÓN
+// ============================================
+
+async function saveEntryToSupabase(entry) {
+  try {
+    const { data, error } = await supabaseClient
+      .from('life_map_entries')
+      .insert([{
+        user_id: userId,
+        category: entry.category,
+        year: entry.year,
+        title: entry.title,
+        description: entry.description || '',
+        intensity: entry.intensity || 3,
+        color: entry.color || 'col1',
+        timestamp: new Date().toISOString()
+      }])
+      .select();
+    
+    if (error) throw error;
+    
+    console.log('✅ Entrada guardada en Supabase:', data);
+    updateSyncIndicator('synced');
+    return data;
+  } catch (error) {
+    console.error('❌ Error al guardar en Supabase:', error);
+    updateSyncIndicator('error');
+    return null;
+  }
+}
+
+async function loadEntriesFromSupabase() {
+  try {
+    updateSyncIndicator('syncing');
+    
+    const { data, error } = await supabaseClient
+      .from('life_map_entries')
+      .select('*')
+      .eq('user_id', userId)
+      .order('year', { ascending: true });
+    
+    if (error) throw error;
+    
+    console.log(`✅ ${data.length} entradas cargadas desde Supabase`);
+    
+    // Guardar en localStorage
+    const localData = data.map(item => ({
+      category: item.category,
+      year: item.year,
+      title: item.title,
+      description: item.description,
+      intensity: item.intensity,
+      color: item.color,
+      supabaseId: item.id,
+      timestamp: item.timestamp
+    }));
+    
+    localStorage.setItem('lifeMapData', JSON.stringify(localData));
+    updateSyncIndicator('synced');
+    
+    return localData;
+  } catch (error) {
+    console.error('❌ Error al cargar desde Supabase:', error);
+    updateSyncIndicator('error');
+    return null;
+  }
+}
+
+async function syncAllEntries() {
+  try {
+    updateSyncIndicator('syncing');
+    
+    const localData = JSON.parse(localStorage.getItem('lifeMapData') || '[]');
+    const cloudData = await loadEntriesFromSupabase();
+    
+    if (!cloudData) {
+      console.log('📱 Usando datos locales (modo offline)');
+      return;
+    }
+    
+    const newLocalEntries = localData.filter(local => !local.supabaseId);
+    
+    if (newLocalEntries.length > 0) {
+      console.log(`📤 Subiendo ${newLocalEntries.length} entradas nuevas...`);
+      
+      for (const entry of newLocalEntries) {
+        await saveEntryToSupabase(entry);
+      }
+      
+      await loadEntriesFromSupabase();
+    }
+    
+    updateSyncIndicator('synced');
+  } catch (error) {
+    console.error('❌ Error en sincronización:', error);
+    updateSyncIndicator('error');
+  }
+}
+
+function updateSyncIndicator(status) {
+  const indicator = document.getElementById('syncStatus');
+  if (!indicator) return;
+  
+  indicator.className = 'sync-status';
+  
+  switch(status) {
+    case 'syncing':
+      indicator.classList.add('syncing');
+      indicator.innerHTML = '<span class="spinner">⟳</span> Sincronizando...';
+      break;
+    case 'synced':
+      indicator.classList.add('synced');
+      indicator.innerHTML = '✓ Sincronizado';
+      setTimeout(() => {
+        indicator.innerHTML = '☁ En la nube';
+      }, 2000);
+      break;
+    case 'error':
+      indicator.classList.add('error');
+      indicator.innerHTML = '⚠ Sin conexión';
+      break;
+    case 'offline':
+      indicator.classList.add('offline');
+      indicator.innerHTML = '📱 Modo offline';
+      break;
+  }
+}
+
+// ============================================
+// AGREGAR ELEMENTOS AL DOM
+// ============================================
+
+function addSyncIndicator() {
+  const header = document.querySelector('.header');
+  if (!header) {
+    console.warn('⚠️ No se encontró .header');
+    return;
+  }
+  
+  const syncDiv = document.createElement('div');
+  syncDiv.id = 'syncStatus';
+  syncDiv.className = 'sync-status';
+  syncDiv.innerHTML = '☁ Preparando...';
+  syncDiv.style.cssText = `
+    margin-top: 12px;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  `;
+  
+  header.appendChild(syncDiv);
+  
+  const style = document.createElement('style');
+  style.textContent = `
+    .sync-status.syncing { color: var(--col2); }
+    .sync-status.synced { color: var(--col1); }
+    .sync-status.error { color: #ff6b6b; }
+    .sync-status.offline { color: var(--dim); }
+    
+    .sync-status .spinner {
+      display: inline-block;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  `;
+  document.head.appendChild(style);
+  
+  console.log('✅ Indicador de sincronización agregado');
+}
+
+function addSyncButton() {
+  const header = document.querySelector('.header');
+  if (!header) return;
+  
+  const syncBtn = document.createElement('button');
+  syncBtn.className = 'sync-btn';
+  syncBtn.innerHTML = '⟳ Sincronizar ahora';
+  syncBtn.style.cssText = `
+    margin-top: 16px;
+    padding: 8px 24px;
+    border-radius: 40px;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  `;
+  
+  syncBtn.onmouseover = () => {
+    syncBtn.style.borderColor = 'var(--col2-mid)';
+    syncBtn.style.background = 'var(--col2-dim)';
+  };
+  
+  syncBtn.onmouseout = () => {
+    syncBtn.style.borderColor = 'var(--card-border)';
+    syncBtn.style.background = 'var(--card-bg)';
+  };
+  
+  syncBtn.onclick = async () => {
+    syncBtn.disabled = true;
+    syncBtn.innerHTML = '⟳ Sincronizando...';
+    await syncAllEntries();
+    syncBtn.disabled = false;
+    syncBtn.innerHTML = '✓ Sincronizado';
+    setTimeout(() => {
+      syncBtn.innerHTML = '⟳ Sincronizar ahora';
+    }, 2000);
+  };
+  
+  header.appendChild(syncBtn);
+  console.log('✅ Botón de sincronización agregado');
+}
+
+// ============================================
+// INTERCEPTAR saveData
+// ============================================
+
+const originalSaveData = window.saveData || function() {};
+
+window.saveData = function() {
+  if (originalSaveData) {
+    originalSaveData();
+  }
+  
+  const data = JSON.parse(localStorage.getItem('lifeMapData') || '[]');
+  const lastEntry = data[data.length - 1];
+  
+  if (lastEntry && !lastEntry.supabaseId) {
+    saveEntryToSupabase(lastEntry).catch(err => {
+      console.error('⚠️ No se pudo sincronizar:', err);
+    });
+  }
+};
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
+
+window.addEventListener('load', async () => {
+  console.log('🚀 Iniciando integración con Supabase...');
+  
+  setTimeout(() => {
+    addSyncIndicator();
+    addSyncButton();
+  }, 500);
+  
+  const cloudData = await loadEntriesFromSupabase();
+  
+  if (cloudData && cloudData.length > 0) {
+    console.log(`✅ Se cargaron ${cloudData.length} entradas desde la nube`);
+    
+    if (typeof loadData === 'function') {
+      loadData();
+    }
+  } else {
+    console.log('📱 Usando datos locales');
+    updateSyncIndicator('offline');
+  }
+});
+
+// Sincronizar cada 5 minutos
+setInterval(syncAllEntries, 5 * 60 * 1000);
+
+console.log('✅ Supabase integration loaded!');
 </script>
 </body>
 </html>
